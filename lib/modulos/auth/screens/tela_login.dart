@@ -4,6 +4,7 @@ import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'dart:math';
 import '../../../core/utils/sessao_usuario.dart';
 import '../../dashboard/screens/home_page.dart';
+import '../../../core/utils/verificador_atualizacao.dart';
 
 class TelaLogin extends StatefulWidget {
   const TelaLogin({super.key});
@@ -19,7 +20,13 @@ class _TelaLoginState extends State<TelaLogin> {
   
   bool _carregando = false;
   String _mensagemErro = '';
-
+  
+  @override
+  void initState() {
+    super.initState();
+    VerificadorAtualizacao.checar(); // 🌟 CHECA A VERSÃO AO ABRIR O SISTEMA
+  }
+  
   Future<void> _fazerLogin() async {
     setState(() {
       _carregando = true;
