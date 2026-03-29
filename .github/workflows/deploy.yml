@@ -1,0 +1,39 @@
+name: Publicar Flutter Web no GitHub Pages
+
+on:
+  push:
+    branches:
+      - main # ou master, dependendo de como está no seu GitHub
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Preparar o Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Instalar dependências
+        run: flutter pub get
+
+      - name: Compilar para Web
+        # ATENÇÃO: Mude "NOME_DO_SEU_REPOSITORIO" abaixo para o nome do seu projeto no GitHub
+        # Mantenha as barras antes e depois! Exemplo: "/app_consorcio/"
+        run: flutter build web --base-href "/NOME_DO_SEU_REPOSITORIO/"
+
+      - name: Preparar arquivos para publicação
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'build/web'
+
+      - name: Publicar no GitHub Pages
+        uses: actions/deploy-pages@v4
