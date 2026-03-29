@@ -4,7 +4,8 @@ import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'dart:math';
 import '../../../core/utils/sessao_usuario.dart';
 import '../../dashboard/screens/home_page.dart';
-import '../../../core/utils/verificador_atualizacao.dart';
+import '../../../core/utils/verificador_atualizacao.dart'; // 🌟 Import do Cache
+import '../../../core/utils/servico_email.dart'; // 🌟 Import do EmailJS
 
 class TelaLogin extends StatefulWidget {
   const TelaLogin({super.key});
@@ -20,13 +21,13 @@ class _TelaLoginState extends State<TelaLogin> {
   
   bool _carregando = false;
   String _mensagemErro = '';
-  
+
   @override
   void initState() {
     super.initState();
     VerificadorAtualizacao.checar(); // 🌟 CHECA A VERSÃO AO ABRIR O SISTEMA
   }
-  
+
   Future<void> _fazerLogin() async {
     setState(() {
       _carregando = true;
@@ -41,7 +42,6 @@ class _TelaLoginState extends State<TelaLogin> {
         return;
       }
 
-      // 🌟 A MÁGICA AQUI: Busca a Pessoa e faz INNER JOIN com o Usuário dela! 🌟
       final resposta = await Supabase.instance.client
           .from('cad_pessoas')
           .select('*, sys_usuarios!inner(*)')
@@ -54,7 +54,6 @@ class _TelaLoginState extends State<TelaLogin> {
       } else if (resposta['sys_usuarios']['grupo_id'] == null) {
         setState(() => _mensagemErro = 'Usuário sem grupo de acesso liberado.');
       } else {
-        // Formata os dados para a Sessão continuar funcionando como antes
         final usuarioFormatado = {
           'id': resposta['sys_usuarios']['id'],
           'pessoa_id': resposta['id'],
@@ -155,7 +154,6 @@ class _TelaLoginState extends State<TelaLogin> {
                     setModalState(() { processando = true; erroModal = ''; });
                     
                     try {
-                      // 🌟 Agora atualiza direto na tabela sys_usuarios
                       await Supabase.instance.client.from('sys_usuarios').update({
                         'senha': novaSenhaController.text,
                         'senha_temporaria': false
@@ -185,7 +183,7 @@ class _TelaLoginState extends State<TelaLogin> {
   }
 
   // ==========================================
-  // 🔐 FLUXO DE RECUPERAÇÃO DE SENHA 
+  // 🔐 FLUXO DE RECUPERAÇÃO DE SENHA COM EMAIL REAL
   // ==========================================
   void _mostrarRecuperacaoSenha() async {
     String cpfDigitado = _cpfMask.unmaskText(_cpfController.text);
@@ -221,7 +219,6 @@ class _TelaLoginState extends State<TelaLogin> {
       return '1C-$senha'; 
     }
 
-    // 🌟 Busca atualizada para navegar pelas duas tabelas!
     if (cpfDigitado.length == 11) {
       setState(() => _carregando = true);
       try {
@@ -233,7 +230,7 @@ class _TelaLoginState extends State<TelaLogin> {
             
         if (res != null) {
           emailReal = res['email'] ?? '';
-          idUsuarioRecuperacao = res['sys_usuarios']['id']; // Pega o ID do usuário para trocar a senha!
+          idUsuarioRecuperacao = res['sys_usuarios']['id']; 
           emailMascarado = mascararEmail(emailReal);
           etapa = 2; 
         } else {
@@ -288,17 +285,13 @@ class _TelaLoginState extends State<TelaLogin> {
                     ],
 
                     if (etapa == 3) ...[
-                      const Icon(Icons.check_circle, color: Colors.green, size: 64),
+                      const Icon(Icons.mark_email_read, color: Colors.green, size: 64),
                       const SizedBox(height: 16),
-                      const Text('Identidade confirmada e senha gerada com sucesso!', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
+                      const Text('E-mail enviado com sucesso!', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
                       const SizedBox(height: 16),
-                      const Text('Ao acessar o sistema com esta senha, você será obrigado a cadastrar uma nova senha definitiva. Para testes, sua senha temporária é:', textAlign: TextAlign.center),
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
-                        child: SelectableText(erroModal, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 2)), 
-                      )
+                      Text('Enviamos uma nova senha temporária para:\n$emailMascarado', textAlign: TextAlign.center),
+                      const SizedBox(height: 16),
+                      const Text('Por favor, verifique sua caixa de entrada (e a pasta de spam). Ao fazer login, o sistema exigirá que você crie uma nova senha definitiva.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
                     ]
                   ],
                 ),
@@ -355,17 +348,30 @@ class _TelaLoginState extends State<TelaLogin> {
                       setModalState(() { processando = true; erroModal = ''; });
                       try {
                         String novaSenha = gerarSenhaAleatoria();
+                        
+                        // 1. Salva no banco
                         await Supabase.instance.client.from('sys_usuarios').update({
                           'senha': novaSenha,
                           'senha_temporaria': true 
                         }).eq('id', idUsuarioRecuperacao!);
                         
-                        setModalState(() { 
-                          etapa = 3; 
-                          erroModal = novaSenha; 
-                        });
+                        // 2. DISPARA O E-MAIL REAL 
+                        bool emailEnviado = await ServicoEmail.enviarEmailRecuperacao(
+                          emailDestino: emailReal,
+                          novaSenha: novaSenha,
+                        );
+
+                        if (emailEnviado) {
+                          setModalState(() { 
+                            etapa = 3; 
+                            erroModal = ''; 
+                          });
+                        } else {
+                          setModalState(() => erroModal = 'A senha foi alterada, mas ocorreu um erro ao enviar o e-mail. Contate o suporte.');
+                        }
+
                       } catch (e) {
-                        setModalState(() => erroModal = 'Erro ao gerar nova senha.');
+                        setModalState(() => erroModal = 'Erro ao processar o pedido.');
                       } finally {
                         setModalState(() => processando = false);
                       }
