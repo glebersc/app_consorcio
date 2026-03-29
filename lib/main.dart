@@ -1,6 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-void main() {
+Future<void> main() async {
+  // Garante que o Flutter está pronto antes de chamar o banco
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Conecta o seu App ao seu Banco de Dados
+  await Supabase.initialize(
+    url: 'https://tsqiklnuokajswnvppns.supabase.co',
+    anonKey: 'sb_publishable_lMavK9BdpLcKlYdZxBVJXg_o_rZeTYp',
+  );
+
   runApp(const MyApp());
 }
 
