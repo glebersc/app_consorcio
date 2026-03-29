@@ -34,27 +34,37 @@ class _TelaLoginState extends State<TelaLogin> {
         return;
       }
 
+      // 🌟 A MÁGICA AQUI: Busca a Pessoa e faz INNER JOIN com o Usuário dela! 🌟
       final resposta = await Supabase.instance.client
-          .from('sys_usuarios')
-          .select()
-          .eq('cpf', cpfLimpo)
-          .eq('senha', _senhaController.text)
+          .from('cad_pessoas')
+          .select('*, sys_usuarios!inner(*)')
+          .eq('documento', cpfLimpo)
+          .eq('sys_usuarios.senha', _senhaController.text)
           .maybeSingle();
 
       if (resposta == null) {
         setState(() => _mensagemErro = 'CPF ou senha incorretos.');
-      } else if (resposta['grupo_id'] == null) {
+      } else if (resposta['sys_usuarios']['grupo_id'] == null) {
         setState(() => _mensagemErro = 'Usuário sem grupo de acesso liberado.');
       } else {
-        // 🌟 VERIFICA SE A SENHA É TEMPORÁRIA 🌟
-        if (resposta['senha_temporaria'] == true) {
-          _mostrarTrocaDeSenhaObrigatoria(resposta);
+        // Formata os dados para a Sessão continuar funcionando como antes
+        final usuarioFormatado = {
+          'id': resposta['sys_usuarios']['id'],
+          'pessoa_id': resposta['id'],
+          'nome_completo': resposta['nome'],
+          'email': resposta['email'],
+          'grupo_id': resposta['sys_usuarios']['grupo_id'],
+          'senha_temporaria': resposta['sys_usuarios']['senha_temporaria']
+        };
+
+        if (usuarioFormatado['senha_temporaria'] == true) {
+          _mostrarTrocaDeSenhaObrigatoria(usuarioFormatado);
         } else {
-          // Entra direto se for senha definitiva
-          _concluirLoginEEntrar(resposta);
+          _concluirLoginEEntrar(usuarioFormatado);
         }
       }
     } catch (e) {
+      debugPrint('Erro Login: $e');
       setState(() => _mensagemErro = 'Erro ao conectar no servidor.');
     } finally {
       setState(() => _carregando = false);
@@ -79,7 +89,7 @@ class _TelaLoginState extends State<TelaLogin> {
 
     showDialog(
       context: context,
-      barrierDismissible: false, // Impede de fechar clicando fora
+      barrierDismissible: false,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
@@ -118,7 +128,6 @@ class _TelaLoginState extends State<TelaLogin> {
               actions: [
                 TextButton(
                   onPressed: () {
-                    // Se cancelar, ele volta pro login e apaga a senha digitada
                     Navigator.pop(context);
                     setState(() => _senhaController.clear());
                   }, 
@@ -139,19 +148,18 @@ class _TelaLoginState extends State<TelaLogin> {
                     setModalState(() { processando = true; erroModal = ''; });
                     
                     try {
-                      // Salva a nova senha e TIRA a flag de temporária
+                      // 🌟 Agora atualiza direto na tabela sys_usuarios
                       await Supabase.instance.client.from('sys_usuarios').update({
                         'senha': novaSenhaController.text,
                         'senha_temporaria': false
                       }).eq('id', usuario['id']);
 
-                      // Atualiza os dados locais para refletir a nova senha
                       usuario['senha'] = novaSenhaController.text;
                       usuario['senha_temporaria'] = false;
 
                       if (mounted) {
-                        Navigator.pop(context); // Fecha o modal
-                        _concluirLoginEEntrar(usuario); // Entra no sistema!
+                        Navigator.pop(context);
+                        _concluirLoginEEntrar(usuario); 
                       }
                     } catch (e) {
                       setModalState(() => erroModal = 'Erro ao salvar a nova senha.');
@@ -170,10 +178,9 @@ class _TelaLoginState extends State<TelaLogin> {
   }
 
   // ==========================================
-  // 🔐 FLUXO DE RECUPERAÇÃO DE SENHA (UX Inteligente)
+  // 🔐 FLUXO DE RECUPERAÇÃO DE SENHA 
   // ==========================================
   void _mostrarRecuperacaoSenha() async {
-    // Lê o que já está digitado na tela de login
     String cpfDigitado = _cpfMask.unmaskText(_cpfController.text);
     
     int etapa = 1;
@@ -183,13 +190,13 @@ class _TelaLoginState extends State<TelaLogin> {
     int? idUsuarioRecuperacao;
     String erroModal = '';
     
-    // Inicia a máscara do modal já com o CPF da tela, caso o usuário precise dele
     final cpfRecuperacaoController = TextEditingController(text: _cpfController.text);
     final emailConfirmacaoController = TextEditingController();
     final maskRecuperacao = MaskTextInputFormatter(mask: '###.###.###-##', filter: {"#": RegExp(r'[0-9]')}, initialText: _cpfController.text);
     bool processando = false;
 
     String mascararEmail(String email) {
+      if (email.isEmpty) return 'Email não cadastrado';
       final partes = email.split('@');
       if (partes.length != 2) return email;
       String nome = partes[0];
@@ -207,19 +214,23 @@ class _TelaLoginState extends State<TelaLogin> {
       return '1C-$senha'; 
     }
 
-    // Se o CPF já estiver preenchido com 11 dígitos, busca antes de abrir o modal!
+    // 🌟 Busca atualizada para navegar pelas duas tabelas!
     if (cpfDigitado.length == 11) {
       setState(() => _carregando = true);
       try {
-        final res = await Supabase.instance.client.from('sys_usuarios').select('id, email').eq('cpf', cpfDigitado).maybeSingle();
+        final res = await Supabase.instance.client
+            .from('cad_pessoas')
+            .select('id, email, sys_usuarios!inner(id)')
+            .eq('documento', cpfDigitado)
+            .maybeSingle();
+            
         if (res != null) {
-          emailReal = res['email'];
-          idUsuarioRecuperacao = res['id'];
+          emailReal = res['email'] ?? '';
+          idUsuarioRecuperacao = res['sys_usuarios']['id']; // Pega o ID do usuário para trocar a senha!
           emailMascarado = mascararEmail(emailReal);
-          etapa = 2; // Pula a etapa de pedir o CPF!
+          etapa = 2; 
         } else {
-          // Se não achar, abre na etapa 1 avisando o erro
-          erroModal = 'O CPF informado na tela não foi encontrado no sistema.';
+          erroModal = 'O CPF informado na tela não possui acesso ao sistema.';
         }
       } catch (e) {
         erroModal = 'Erro ao verificar o CPF.';
@@ -302,14 +313,19 @@ class _TelaLoginState extends State<TelaLogin> {
                       }
 
                       try {
-                        final res = await Supabase.instance.client.from('sys_usuarios').select('id, email').eq('cpf', cpfBusca).maybeSingle();
+                        final res = await Supabase.instance.client
+                            .from('cad_pessoas')
+                            .select('id, email, sys_usuarios!inner(id)')
+                            .eq('documento', cpfBusca)
+                            .maybeSingle();
+                            
                         if (res == null) {
-                          setModalState(() => erroModal = 'CPF não encontrado no sistema.');
+                          setModalState(() => erroModal = 'CPF não possui acesso ao sistema.');
                         } else {
-                          emailReal = res['email'];
-                          idUsuarioRecuperacao = res['id'];
+                          emailReal = res['email'] ?? '';
+                          idUsuarioRecuperacao = res['sys_usuarios']['id'];
                           emailMascarado = mascararEmail(emailReal);
-                          setModalState(() { etapa = 2; erroModal = ''; }); // Avança limpo
+                          setModalState(() { etapa = 2; erroModal = ''; }); 
                         }
                       } catch (e) {
                         setModalState(() => erroModal = 'Erro ao buscar dados.');
@@ -332,7 +348,6 @@ class _TelaLoginState extends State<TelaLogin> {
                       setModalState(() { processando = true; erroModal = ''; });
                       try {
                         String novaSenha = gerarSenhaAleatoria();
-                        // Salva a senha e ativa a flag de temporária
                         await Supabase.instance.client.from('sys_usuarios').update({
                           'senha': novaSenha,
                           'senha_temporaria': true 
