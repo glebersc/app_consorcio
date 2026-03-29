@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 // Importa a tela principal que criamos
-import 'modulos/dashboard/screens/home_page.dart'; 
+import 'modulos/auth/screens/tela_login.dart';
 
 Future<void> main() async {
   // Garante que o Flutter está pronto antes de chamar o banco
@@ -24,14 +24,12 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Demo 1CÓDIGO',
-      debugShowCheckedModeBanner: false, // Remove a faixa de 'DEBUG' da tela
       theme: ThemeData(
-        // Define a cor principal do sistema (Aquele azul escuro bonito)
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF00447C)),
-        useMaterial3: true, // Usa o design mais moderno do Google
+        useMaterial3: true,
       ),
-      // Chama a tela responsiva que criamos no outro arquivo
-      home: const HomePage(), 
+      // 🌟 AGORA COMEÇA NA TELA DE LOGIN 🌟
+      home: const TelaLogin(),
     );
   }
 }

@@ -6,6 +6,10 @@ import 'package:pointer_interceptor/pointer_interceptor.dart'; // Escudo anti-if
 import '../../configuracoes/screens/tela_gerenciar_menus.dart';
 import '../../../core/utils/icones_sistema.dart'; 
 import '../../../shared/widgets/web_view_embutido.dart';
+import '../../configuracoes/screens/tela_grupos_permissoes.dart';
+import '../../cadastros/screens/tela_usuarios.dart';
+import '../../../core/utils/sessao_usuario.dart';
+import '../../auth/screens/tela_login.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -37,13 +41,25 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _buscarMenusNoBanco() async {
     try {
-      final resposta = await Supabase.instance.client
-          .from('sys_menus')
-          .select()
-          .order('ordem', ascending: true);
+      final supabase = Supabase.instance.client;
+      final grupoId = SessaoUsuario().grupoId;
+
+      if (grupoId == null) return; // Se por acaso não tiver grupo, para aqui
+
+      // 1. Busca TODOS os menus ordenados
+      final todosMenus = await supabase.from('sys_menus').select().order('ordem', ascending: true);
+      
+      // 2. Busca as permissões EXATAS deste grupo
+      final permissoes = await supabase.from('sys_permissoes').select('menu_id').eq('grupo_id', grupoId);
+      
+      // 3. Cria uma lista apenas com os IDs que ele pode ver
+      final idsPermitidos = permissoes.map((p) => p['menu_id'] as int).toSet();
+
+      // 4. Filtra a lista de menus original para manter só o que tem permissão
+      final menusFiltrados = todosMenus.where((menu) => idsPermitidos.contains(menu['id'])).toList();
 
       setState(() {
-        _menusDoBanco = resposta;
+        _menusDoBanco = menusFiltrados; // 🌟 AGORA A TELA SÓ DESENHA O QUE FOI FILTRADO!
         _carregandoMenus = false;
       });
     } catch (e) {
@@ -109,12 +125,23 @@ class _HomePageState extends State<HomePage> {
             backgroundColor: corPrincipal,
             foregroundColor: Colors.white,
             title: Text(
-              isWeb || rotaAtiva == 'tela_dashboard' 
-                  ? 'Demo 1CÓDIGO' 
-                  : 'Demo 1CÓDIGO > $tituloAtivo', 
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-              overflow: TextOverflow.ellipsis,
+              isWeb || rotaAtiva == 'tela_dashboard' ? 'Demo 1CÓDIGO' : 'Demo 1CÓDIGO > $tituloAtivo', 
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18), overflow: TextOverflow.ellipsis,
             ),
+            actions: [
+              // 🌟 MOSTRA O NOME DO USUÁRIO E O BOTÃO DE SAIR 🌟
+              Center(child: Text('Olá, ${SessaoUsuario().nome}', style: const TextStyle(fontSize: 14))),
+              const SizedBox(width: 16),
+              IconButton(
+                icon: const Icon(Icons.exit_to_app),
+                tooltip: 'Sair do Sistema',
+                onPressed: () {
+                  SessaoUsuario().deslogar();
+                  Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => TelaLogin()));
+                },
+              ),
+              const SizedBox(width: 8),
+            ],
           ),
           drawer: Drawer(
             // 🌟 ESCUDO ANTI-IFRAME APLICADO AQUI 🌟
@@ -164,6 +191,10 @@ class _HomePageState extends State<HomePage> {
         return const Center(child: Text('Área de Trabalho Principal', style: TextStyle(fontSize: 18)));
       case 'tela_configuracoes': 
         return const TelaGerenciarMenus();
+      case 'tela_grupos_permissoes': 
+        return const TelaGruposPermissoes();
+      case 'tela_usuarios': 
+        return const TelaUsuarios();
       default:
         return Center(
           child: Text('Arquivo da tela ainda não criado para a rota:\n$rota', textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black54)),
