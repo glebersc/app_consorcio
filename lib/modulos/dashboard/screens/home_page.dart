@@ -10,6 +10,7 @@ import '../../configuracoes/screens/tela_grupos_permissoes.dart';
 import '../../../core/utils/sessao_usuario.dart';
 import '../../auth/screens/tela_login.dart';
 import '../../cadastros/screens/tela_pessoas.dart';
+import '../../cadastros/screens/tela_estabelecimentos.dart';
 import '../../configuracoes/screens/tela_perfis_atuacao.dart';
 
 class HomePage extends StatefulWidget {
@@ -198,6 +199,8 @@ class _HomePageState extends State<HomePage> {
         return const TelaPessoas();
       case 'tela_perfis_atuacao': 
         return const TelaPerfisAtuacao();
+      case 'tela_estabelecimentos': 
+        return const TelaEstabelecimentos();
       default:
         return Center(
           child: Text('Arquivo da tela ainda não criado para a rota:\n$rota', textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black54)),
